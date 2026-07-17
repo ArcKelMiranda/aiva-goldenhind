@@ -1,21 +1,30 @@
 # Bastion ingestion runtime
 
-## Ownership
-- The bastion ops team owns everything under `bastion/`.
-- This slice is intentionally local-only and does not change downstream systems.
+## Purpose
+Pull BNY files from the remote SFTP source and keep them only on the bastion.
 
-## Rollback / off switch
+## How it runs
+- Entry point: `python -m scripts.run_ingestion`
+- Config: environment variables + SSM parameter name in `BNY_SFTP_SECRET_ID`
+- Storage: `data/work/` for staging, `data/archive/` for retained files
+- Retention: files older than 90 days are removed on each run
+
+## Inputs
+- `BNY_SFTP_HOST`
+- `BNY_SFTP_PORT`
+- `BNY_SFTP_USERNAME`
+- `BNY_SFTP_SECRET_ID` (SSM parameter name)
+- `BNY_SFTP_REMOTE_DIR`
+- `YHAT_BNY_LOCAL_ROOT`
+
+## Behavior
+- If the remote directory has no downloadable files, the run exits cleanly.
+- If authentication or retrieval fails, the run fails closed and logs the error.
+- Logs are JSON and written for bootstrap, file download, retention, and completion.
+
+## Rollback
 - Disable the cron/manual trigger for `scripts/run_ingestion.py`.
-- Leave the manual BNY process in place; rollback is a config/off switch, not a data migration.
-
-## Local-only retention
-- Downloads are stored only under the bastion `data/work/` and `data/archive/` directories.
-- `src/retention.py` removes files older than 90 days on every run.
-
-## Operational note
-- The trigger mode is still unresolved: schedule, on-demand, or both must be decided before the next apply slice.
-- Manual operator path: invoke `python -m scripts.run_ingestion` or call `scripts.run_ingestion.main()` directly.
-- The runtime reads the SFTP credential from SSM Parameter Store; `BNY_SFTP_SECRET_ID` is the parameter name, not a Secrets Manager identifier.
+- Existing manual handling is unchanged.
 
 ## Smoke checks
-- See `tests/smoke_test_notes.md` for the two lightweight bastion smoke scenarios.
+- See `tests/smoke_test_notes.md`.
