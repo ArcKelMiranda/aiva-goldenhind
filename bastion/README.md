@@ -8,6 +8,8 @@ The goal is simple:
 - land them safely on the bastion
 - keep them local only
 - make them available for downstream processing without exposing credentials or changing the manual fallback process
+- bootstrap from `28/06` onward
+- keep only the current month after that
 
 ## Data flow
 1. Trigger the runner manually or by schedule.
@@ -16,7 +18,7 @@ The goal is simple:
 4. Connect to the remote SFTP source.
 5. List files and download only the ones that are not already present in `data/archive/`.
 6. Stage them under `data/work/` and promote them to `data/archive/`.
-7. Remove local files older than 90 days.
+7. Remove files from previous months and keep only the current month.
 8. Emit JSON logs for each run.
 
 ## How it runs
@@ -25,7 +27,7 @@ The goal is simple:
 - AWS region: use `AWS_REGION` or `AWS_DEFAULT_REGION` (defaults to `us-east-1`)
 - Host keys: Paramiko reads `~/.ssh/known_hosts` by default; override with `BNY_SSH_KNOWN_HOSTS` if needed
 - Storage: `data/work/` for staging, `data/archive/` for retained files
-- Retention: files older than 90 days are removed on each run
+- Retention: only the current month is kept on each run
 
 ## Inputs
 - `BNY_SFTP_HOST`

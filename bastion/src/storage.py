@@ -83,3 +83,7 @@ def local_only_directories(local_root: str | Path) -> dict[str, str]:
         "registry": str(layout.registry),
         "logs": str(layout.logs),
     }
+
+
+def bootstrap_marker_path(local_root: str | Path) -> Path:
+    return resolve_storage_layout(local_root).registry / "bootstrap.complete"

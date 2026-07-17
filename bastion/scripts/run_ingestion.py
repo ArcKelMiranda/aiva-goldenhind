@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sys
 import os
+from datetime import date, datetime, timezone
+import re
 from pathlib import Path
 
 import boto3
@@ -16,11 +18,13 @@ if str(BASTION_ROOT) not in sys.path:
 from src.config import load_config
 from src.contracts import IngestionResult, new_correlation_id
 from src.logger import configure_logger, emit_event
-from src.retention import purge_expired_files
+from src.retention import purge_previous_month_files
 from src.sftp_client import SftpAuthError, SftpClient, SftpClientError, SftpNoFileError, parse_secret_payload
-from src.storage import archive_path_for, ensure_storage_layout, local_only_directories, promote_staged_file, staged_download_path
+from src.storage import archive_path_for, bootstrap_marker_path, ensure_storage_layout, local_only_directories, promote_staged_file, staged_download_path
 
 TARGET_REMOTE_PREFIXES = ("EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_",)
+BOOTSTRAP_CUTOFF = date(2026, 6, 28)
+REMOTE_DATE_PATTERN = re.compile(r"(?P<day>\d{2})-(?P<mon>[A-Za-z]{3})-(?P<year>\d{4})")
 
 
 def _read_parameter_string(parameter_name: str) -> str:
@@ -37,6 +41,40 @@ def _read_parameter_string(parameter_name: str) -> str:
 
 def _is_target_file(remote_name: str) -> bool:
     return remote_name.startswith(TARGET_REMOTE_PREFIXES) and not remote_name.startswith("~$") and not remote_name.startswith(".")
+
+
+def _remote_file_date(remote_name: str) -> date | None:
+    match = REMOTE_DATE_PATTERN.search(remote_name)
+    if not match:
+        return None
+    try:
+        return datetime.strptime(match.group(0), "%d-%b-%Y").date()
+    except ValueError:
+        return None
+
+
+def _bootstrap_complete(local_root: str | Path) -> bool:
+    return bootstrap_marker_path(local_root).exists()
+
+
+def _mark_bootstrap_complete(local_root: str | Path) -> None:
+    marker = bootstrap_marker_path(local_root)
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(datetime.now(timezone.utc).isoformat())
+
+
+def _selection_cutoff(local_root: str | Path, now: date | None = None) -> date:
+    current = now or datetime.now(timezone.utc).date()
+    if _bootstrap_complete(local_root):
+        return date(current.year, current.month, 1)
+    return BOOTSTRAP_CUTOFF
+
+
+def _should_download_file(local_root: str | Path, remote_name: str, now: date | None = None) -> bool:
+    file_date = _remote_file_date(remote_name)
+    if file_date is None:
+        return False
+    return file_date >= _selection_cutoff(local_root, now=now)
 
 
 def _is_already_archived(local_root: str | Path, remote_name: str) -> bool:
@@ -81,6 +119,7 @@ def main() -> int:
         secret = parse_secret_payload(_read_parameter_string(config.secret_id))
         client = SftpClient(config.sftp_host, config.sftp_port, config.username, secret)
         target_files = [remote_name for remote_name in client.list_files(config.remote_dir) if _is_target_file(remote_name)]
+        target_files = [remote_name for remote_name in target_files if _should_download_file(config.local_root, remote_name)]
         target_files = [remote_name for remote_name in target_files if not _is_already_archived(config.local_root, remote_name)]
         if not target_files:
             raise SftpNoFileError(f"No new target files found in {config.remote_dir}")
@@ -130,13 +169,13 @@ def main() -> int:
         )
     finally:
         try:
-            deleted_files = purge_expired_files(config.local_root, config.retention_days)
+            deleted_files = purge_previous_month_files(config.local_root)
             emit_event(
                 logger,
                 event="retention_complete",
                 status="success",
                 correlationId=correlation_id,
-                retentionDays=config.retention_days,
+                retentionCutoff="current-month",
                 deletedFiles=deleted_files,
                 deletedCount=len(deleted_files),
             )
@@ -159,6 +198,8 @@ def main() -> int:
         deleted_files=deleted_files,
         correlation_id=correlation_id,
     )
+    if status in {"success", "no_file"} and not _bootstrap_complete(config.local_root):
+        _mark_bootstrap_complete(config.local_root)
     return exit_code
 
 

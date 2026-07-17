@@ -13,7 +13,7 @@ from src.logger import JsonFormatter
 from src.paths import archive_dir, remote_file_name, work_dir
 from src.retention import purge_expired_files
 from src.storage import archive_path_for, staged_download_path, work_path_for
-from scripts.run_ingestion import _is_already_archived, _is_target_file
+from scripts.run_ingestion import _is_already_archived, _is_target_file, _should_download_file
 
 
 def test_load_config_parses_environment(monkeypatch):
@@ -148,3 +148,19 @@ def test_archive_dedup_check_detects_existing_files(tmp_path):
 
     assert _is_already_archived(root, "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_01-Jul-2026.XLSX") is True
     assert _is_already_archived(root, "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_02-Jul-2026.XLSX") is False
+
+
+def test_download_selection_uses_bootstrap_cutoff_until_marker_exists(tmp_path):
+    root = tmp_path / "bastion"
+    assert _should_download_file(root, "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_27-Jun-2026.XLSX") is False
+    assert _should_download_file(root, "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_28-Jun-2026.XLSX") is True
+
+
+def test_download_selection_switches_to_current_month_after_bootstrap(tmp_path):
+    root = tmp_path / "bastion"
+    marker = root / "data" / ".registry" / "bootstrap.complete"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text("done")
+
+    assert _should_download_file(root, "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_30-Jun-2026.XLSX") is False
+    assert _should_download_file(root, "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_01-Jul-2026.XLSX") is True
