@@ -2,3 +2,11 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+PRD_YHat_BNY_Ingesta_SFTP_v1.1_Seguridad.md
+.env
+.venv/
+*.pem
+*.key
+*.p12
+*.pfx
+*.log
