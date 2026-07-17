@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import os
 from pathlib import Path
 
 import boto3
@@ -21,7 +22,8 @@ from src.storage import ensure_storage_layout, local_only_directories, promote_s
 
 
 def _read_parameter_string(parameter_name: str) -> str:
-    client = boto3.client("ssm")
+    region_name = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "us-east-1"
+    client = boto3.client("ssm", region_name=region_name)
     response = client.get_parameter(Name=parameter_name, WithDecryption=True)
     parameter = response.get("Parameter", {})
     value = parameter.get("Value")

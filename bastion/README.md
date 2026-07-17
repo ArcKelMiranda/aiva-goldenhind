@@ -22,6 +22,7 @@ The goal is simple:
 ## How it runs
 - Entry point: `python -m scripts.run_ingestion`
 - Config: environment variables + SSM parameter name in `BNY_SFTP_SECRET_ID`
+- AWS region: use `AWS_REGION` or `AWS_DEFAULT_REGION` (defaults to `us-east-1`)
 - Storage: `data/work/` for staging, `data/archive/` for retained files
 - Retention: files older than 90 days are removed on each run
 

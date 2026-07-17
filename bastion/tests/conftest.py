@@ -81,7 +81,7 @@ def reset_runtime_logger():
 def install_parameter_client(monkeypatch):
     def _install(parameter_value: str) -> FakeSSMClient:
         client = FakeSSMClient(parameter_value)
-        def _client(service_name):
+        def _client(service_name, *args, **kwargs):
             if service_name != "ssm":
                 raise AssertionError(service_name)
             return client
