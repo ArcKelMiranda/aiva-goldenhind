@@ -37,6 +37,27 @@ def test_main_success_pulls_and_archives_file(tmp_path, monkeypatch, capsys, ins
     assert any(event["event"] == "ingestion_complete" and event["status"] == "success" for event in output)
 
 
+def test_main_skips_already_archived_files_and_downloads_only_missing(tmp_path, monkeypatch, capsys, install_parameter_client, install_fake_ssh_client):
+    root = tmp_path / "bastion"
+    _set_runtime_env(monkeypatch, root)
+    install_parameter_client('{"password":"secret"}')
+    install_fake_ssh_client({
+        "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_01-Jul-2026.XLSX": b"new-bytes",
+        "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_02-Jul-2026.XLSX": b"missing-bytes",
+    })
+    existing = root / "data" / "archive" / "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_01-Jul-2026.XLSX"
+    existing.parent.mkdir(parents=True, exist_ok=True)
+    existing.write_bytes(b"old-bytes")
+
+    exit_code = run_ingestion.main()
+
+    output = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert exit_code == 0
+    assert existing.read_bytes() == b"old-bytes"
+    assert (root / "data" / "archive" / "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_02-Jul-2026.XLSX").read_bytes() == b"missing-bytes"
+    assert any(event["event"] == "ingestion_complete" and event["downloadedCount"] == 1 for event in output)
+
+
 def test_main_direct_manual_operator_path_runs_without_scheduler(tmp_path, monkeypatch, capsys, install_parameter_client, install_fake_ssh_client):
     root = tmp_path / "bastion"
     _set_runtime_env(monkeypatch, root)

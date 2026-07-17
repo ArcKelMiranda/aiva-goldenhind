@@ -18,7 +18,7 @@ from src.contracts import IngestionResult, new_correlation_id
 from src.logger import configure_logger, emit_event
 from src.retention import purge_expired_files
 from src.sftp_client import SftpAuthError, SftpClient, SftpClientError, SftpNoFileError, parse_secret_payload
-from src.storage import ensure_storage_layout, local_only_directories, promote_staged_file, staged_download_path
+from src.storage import archive_path_for, ensure_storage_layout, local_only_directories, promote_staged_file, staged_download_path
 
 TARGET_REMOTE_PREFIXES = ("EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_",)
 
@@ -37,6 +37,10 @@ def _read_parameter_string(parameter_name: str) -> str:
 
 def _is_target_file(remote_name: str) -> bool:
     return remote_name.startswith(TARGET_REMOTE_PREFIXES) and not remote_name.startswith("~$") and not remote_name.startswith(".")
+
+
+def _is_already_archived(local_root: str | Path, remote_name: str) -> bool:
+    return archive_path_for(local_root, remote_name).exists()
 
 
 def _emit_summary(logger, correlation_id: str, status: str, downloaded_files: list[str], deleted_files: list[str]) -> None:
@@ -77,8 +81,9 @@ def main() -> int:
         secret = parse_secret_payload(_read_parameter_string(config.secret_id))
         client = SftpClient(config.sftp_host, config.sftp_port, config.username, secret)
         target_files = [remote_name for remote_name in client.list_files(config.remote_dir) if _is_target_file(remote_name)]
+        target_files = [remote_name for remote_name in target_files if not _is_already_archived(config.local_root, remote_name)]
         if not target_files:
-            raise SftpNoFileError(f"No target files found in {config.remote_dir}")
+            raise SftpNoFileError(f"No new target files found in {config.remote_dir}")
 
         for remote_name in target_files:
             staged_path = staged_download_path(config.local_root, remote_name, correlation_id)

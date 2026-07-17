@@ -14,7 +14,7 @@ The goal is simple:
 2. Load runtime config from environment variables.
 3. Read the SFTP credential reference from SSM Parameter Store.
 4. Connect to the remote SFTP source.
-5. List files and download new ones.
+5. List files and download only the ones that are not already present in `data/archive/`.
 6. Stage them under `data/work/` and promote them to `data/archive/`.
 7. Remove local files older than 90 days.
 8. Emit JSON logs for each run.
@@ -36,7 +36,7 @@ The goal is simple:
 - `YHAT_BNY_LOCAL_ROOT`
 
 ## Behavior
-- No downloadable files: the run exits cleanly.
+- No downloadable files or all files already archived: the run exits cleanly.
 - Files outside the `EnhancedTransactionReportInclFX...` prefix are ignored.
 - Auth or connection failure: the run fails closed and logs the error.
 - All operational events are emitted as JSON logs.

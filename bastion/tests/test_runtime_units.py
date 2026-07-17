@@ -13,7 +13,7 @@ from src.logger import JsonFormatter
 from src.paths import archive_dir, remote_file_name, work_dir
 from src.retention import purge_expired_files
 from src.storage import archive_path_for, staged_download_path, work_path_for
-from scripts.run_ingestion import _is_target_file
+from scripts.run_ingestion import _is_already_archived, _is_target_file
 
 
 def test_load_config_parses_environment(monkeypatch):
@@ -137,3 +137,14 @@ def test_target_file_filter_only_accepts_enhanced_transaction_reports():
     assert _is_target_file("EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_01-Jul-2026.XLSX") is True
     assert _is_target_file("salesrepOLP20260717070010.csv") is False
     assert _is_target_file("~$EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_01-Jul-2026.XLSX") is False
+
+
+def test_archive_dedup_check_detects_existing_files(tmp_path):
+    root = tmp_path / "bastion"
+    archive = root / "data" / "archive"
+    archive.mkdir(parents=True)
+    existing = archive / "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_01-Jul-2026.XLSX"
+    existing.write_text("present")
+
+    assert _is_already_archived(root, "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_01-Jul-2026.XLSX") is True
+    assert _is_already_archived(root, "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_02-Jul-2026.XLSX") is False
