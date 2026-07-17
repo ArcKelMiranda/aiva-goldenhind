@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
-from .paths import archive_dir, bastion_root, logs_dir, registry_dir, remote_file_name, work_dir
+from .paths import archive_dir, archive_folder_for, bastion_root, logs_dir, registry_dir, remote_file_name, work_dir
 
 
 @dataclass(frozen=True)
@@ -48,7 +48,12 @@ def work_path_for(local_root: str | Path, remote_path: str) -> Path:
 
 
 def archive_path_for(local_root: str | Path, remote_path: str) -> Path:
-    return resolve_storage_layout(local_root).archive / remote_file_name(remote_path)
+    layout = resolve_storage_layout(local_root)
+    destination = layout.archive
+    folder = archive_folder_for(remote_path)
+    if folder:
+        destination = destination / folder
+    return destination / remote_file_name(remote_path)
 
 
 def staged_download_path(local_root: str | Path, remote_path: str, correlation_id: str | None = None) -> Path:
@@ -63,8 +68,7 @@ def staged_download_path(local_root: str | Path, remote_path: str, correlation_i
 def promote_staged_file(local_root: str | Path, staged_path: str | Path, remote_path: str) -> Path:
     """Atomically move a staged file into the archive directory."""
 
-    layout = resolve_storage_layout(local_root)
-    destination = layout.archive / remote_file_name(remote_path)
+    destination = archive_path_for(local_root, remote_path)
     source = Path(staged_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     replace(source, destination)

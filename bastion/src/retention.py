@@ -2,31 +2,30 @@
 
 from __future__ import annotations
 
-import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
+from .paths import file_date_from_name
 from .storage import resolve_storage_layout
-
-MONTH_DATE_PATTERN = re.compile(r"(?P<day>\d{2})-(?P<mon>[A-Za-z]{3})-(?P<year>\d{4})")
 
 
 def _file_timestamp(path: Path) -> datetime | None:
-    match = MONTH_DATE_PATTERN.search(path.name)
-    if match:
-        try:
-            return datetime.strptime(match.group(0), "%d-%b-%Y").replace(tzinfo=timezone.utc)
-        except ValueError:
-            return None
-    return None
+    file_date = file_date_from_name(path.name)
+    if file_date is None:
+        return None
+    return datetime.combine(file_date, datetime.min.time(), tzinfo=timezone.utc)
 
 
-def purge_previous_month_files(local_root: str | Path, now: datetime | None = None) -> list[str]:
+def purge_previous_month_files(
+    local_root: str | Path,
+    now: datetime | None = None,
+    bootstrap_floor_date: date | None = None,
+) -> list[str]:
     """Delete archived and staged files that are older than the current month."""
 
     layout = resolve_storage_layout(local_root)
     current = now or datetime.now(timezone.utc)
-    cutoff = datetime(current.year, current.month, 1, tzinfo=timezone.utc)
+    cutoff = date(current.year, current.month, 1)
     deleted: list[str] = []
 
     for folder in (layout.work, layout.archive):
@@ -35,16 +34,24 @@ def purge_previous_month_files(local_root: str | Path, now: datetime | None = No
         for path in folder.rglob("*"):
             if not path.is_file():
                 continue
-            modified = _file_timestamp(path) or datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+            file_timestamp = _file_timestamp(path)
+            modified = (file_timestamp or datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)).date()
             if modified < cutoff:
+                if bootstrap_floor_date is not None and file_timestamp is not None and bootstrap_floor_date <= file_timestamp.date() < cutoff:
+                    continue
                 path.unlink()
                 deleted.append(str(path))
 
     return sorted(deleted)
 
 
-def purge_expired_files(local_root: str | Path, retention_days: int, now: datetime | None = None) -> list[str]:
+def purge_expired_files(
+    local_root: str | Path,
+    retention_days: int,
+    now: datetime | None = None,
+    bootstrap_floor_date: date | None = None,
+) -> list[str]:
     """Backward-compatible wrapper for the current-month retention policy."""
 
     _ = retention_days
-    return purge_previous_month_files(local_root, now=now)
+    return purge_previous_month_files(local_root, now=now, bootstrap_floor_date=bootstrap_floor_date)

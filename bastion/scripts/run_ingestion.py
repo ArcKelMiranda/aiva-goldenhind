@@ -5,7 +5,6 @@ from __future__ import annotations
 import sys
 import os
 from datetime import date, datetime, timezone
-import re
 from pathlib import Path
 
 import boto3
@@ -18,13 +17,12 @@ if str(BASTION_ROOT) not in sys.path:
 from src.config import load_config
 from src.contracts import IngestionResult, new_correlation_id
 from src.logger import configure_logger, emit_event
+from src.paths import archive_folder_for, file_date_from_name
 from src.retention import purge_previous_month_files
 from src.sftp_client import SftpAuthError, SftpClient, SftpClientError, SftpNoFileError, parse_secret_payload
 from src.storage import archive_path_for, bootstrap_marker_path, ensure_storage_layout, local_only_directories, promote_staged_file, staged_download_path
 
-TARGET_REMOTE_PREFIXES = ("EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_",)
 BOOTSTRAP_CUTOFF = date(2026, 6, 28)
-REMOTE_DATE_PATTERN = re.compile(r"(?P<day>\d{2})-(?P<mon>[A-Za-z]{3})-(?P<year>\d{4})")
 
 
 def _read_parameter_string(parameter_name: str) -> str:
@@ -40,17 +38,11 @@ def _read_parameter_string(parameter_name: str) -> str:
 
 
 def _is_target_file(remote_name: str) -> bool:
-    return remote_name.startswith(TARGET_REMOTE_PREFIXES) and not remote_name.startswith("~$") and not remote_name.startswith(".")
+    return archive_folder_for(remote_name) is not None and not remote_name.startswith("~$") and not remote_name.startswith(".")
 
 
 def _remote_file_date(remote_name: str) -> date | None:
-    match = REMOTE_DATE_PATTERN.search(remote_name)
-    if not match:
-        return None
-    try:
-        return datetime.strptime(match.group(0), "%d-%b-%Y").date()
-    except ValueError:
-        return None
+    return file_date_from_name(remote_name)
 
 
 def _bootstrap_complete(local_root: str | Path) -> bool:
@@ -98,6 +90,7 @@ def main() -> int:
     config = load_config()
     logger = configure_logger()
     layout = ensure_storage_layout(config.local_root)
+    bootstrap_active = not _bootstrap_complete(config.local_root)
     correlation_id = new_correlation_id()
     downloaded_files: list[str] = []
     deleted_files: list[str] = []
@@ -169,7 +162,10 @@ def main() -> int:
         )
     finally:
         try:
-            deleted_files = purge_previous_month_files(config.local_root)
+            deleted_files = purge_previous_month_files(
+                config.local_root,
+                bootstrap_floor_date=BOOTSTRAP_CUTOFF if bootstrap_active else None,
+            )
             emit_event(
                 logger,
                 event="retention_complete",
