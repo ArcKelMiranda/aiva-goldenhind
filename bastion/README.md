@@ -23,6 +23,7 @@ The goal is simple:
 - Entry point: `python -m scripts.run_ingestion`
 - Config: environment variables + SSM parameter name in `BNY_SFTP_SECRET_ID`
 - AWS region: use `AWS_REGION` or `AWS_DEFAULT_REGION` (defaults to `us-east-1`)
+- Host keys: Paramiko reads `~/.ssh/known_hosts` by default; override with `BNY_SSH_KNOWN_HOSTS` if needed
 - Storage: `data/work/` for staging, `data/archive/` for retained files
 - Retention: files older than 90 days are removed on each run
 

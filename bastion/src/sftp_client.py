@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import posixpath
 import stat
 from dataclasses import dataclass
@@ -130,6 +131,9 @@ class SftpClient:
     def _connect(self) -> paramiko.SSHClient:
         client = paramiko.SSHClient()
         client.load_system_host_keys()
+        known_hosts_path = os.getenv("BNY_SSH_KNOWN_HOSTS", str(Path.home() / ".ssh" / "known_hosts"))
+        if Path(known_hosts_path).exists():
+            client.load_host_keys(known_hosts_path)
         client.set_missing_host_key_policy(paramiko.RejectPolicy())
 
         try:
