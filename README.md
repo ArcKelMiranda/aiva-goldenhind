@@ -1,22 +1,19 @@
 # aiva-goldenhind
 
-Servicio de ingesta para el bastion EC2 de Aiva.
+Ingestion service for the Aiva bastion EC2.
 
-## Qué hace
-- Extrae solo los archivos `EnhancedTransactionReportInclFX...` desde la fuente SFTP de Aiva.
-- Los guarda localmente en el bastion.
-- Los deja listos para su procesamiento posterior.
-- La primera carga toma archivos desde `28/06` en adelante.
-- Después, conserva solo los archivos del mes vigente.
+## Runtime contract
+- Downloads only the Aiva report families it understands.
+- Archives them under `data/archive/GoldenHind/` and `data/archive/Davinci/`.
+- Keeps legacy `data/archive/<filename>` files valid for dedupe.
+- Boots from `28/06` on the first run, then keeps only the current month.
 
-## Flujo
-1. Se ejecuta el runner de ingesta.
-2. Lee la configuración del entorno.
-3. Obtiene la credencial desde SSM Parameter Store.
-4. Se conecta al SFTP de Aiva.
-5. Descarga solo los archivos nuevos y omite los que ya existen en el bastion.
-6. Los mueve a almacenamiento local en el bastion.
-7. Limpia los archivos de meses anteriores y conserva solo el mes vigente.
+## Flow
+1. Load config and SSM secret.
+2. Connect to Aiva SFTP.
+3. Download new target files only.
+4. Promote them into the routed archive folders.
+5. Apply retention after each run.
 
-## Objetivo
-Mantener la extracción aislada en el bastion, sin exponer credenciales ni cambiar el flujo manual existente.
+## Goal
+Keep extraction isolated on the bastion without changing the manual fallback path.

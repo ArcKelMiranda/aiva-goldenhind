@@ -12,7 +12,7 @@ from src.config import DEFAULT_LOCAL_ROOT, DEFAULT_RETENTION_DAYS, load_config
 from src.logger import JsonFormatter
 from src.paths import archive_dir, archive_folder_for, remote_file_name, work_dir
 from src.retention import purge_expired_files, purge_previous_month_files
-from src.storage import archive_path_for, staged_download_path, work_path_for
+from src.storage import archive_candidate_paths, archive_path_for, staged_download_path, work_path_for
 from scripts.run_ingestion import _is_already_archived, _is_target_file, _should_download_file
 
 
@@ -195,8 +195,23 @@ def test_archive_dedup_check_detects_existing_files(tmp_path):
     existing = archive / "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_01-Jul-2026.XLSX"
     existing.write_text("present")
 
+    legacy = root / "data" / "archive" / "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_02-Jul-2026.XLSX"
+    legacy.write_text("present-legacy")
+
     assert _is_already_archived(root, "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_01-Jul-2026.XLSX") is True
-    assert _is_already_archived(root, "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_02-Jul-2026.XLSX") is False
+    assert _is_already_archived(root, "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_02-Jul-2026.XLSX") is True
+    assert _is_already_archived(root, "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_03-Jul-2026.XLSX") is False
+
+
+def test_archive_candidate_paths_include_routed_and_legacy_locations(tmp_path):
+    root = tmp_path / "bastion"
+
+    candidates = archive_candidate_paths(root, "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_01-Jul-2026.XLSX")
+
+    assert candidates == (
+        root / "data" / "archive" / "Davinci" / "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_01-Jul-2026.XLSX",
+        root / "data" / "archive" / "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_01-Jul-2026.XLSX",
+    )
 
 
 def test_download_selection_uses_bootstrap_cutoff_until_marker_exists(tmp_path):

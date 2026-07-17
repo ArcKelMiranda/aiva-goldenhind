@@ -40,6 +40,32 @@ def test_main_success_pulls_and_archives_file(tmp_path, monkeypatch, capsys, ins
     assert any(event["event"] == "ingestion_complete" and event["status"] == "success" for event in output)
 
 
+def test_main_first_successful_run_downloads_bootstraps_and_preserves_window(tmp_path, monkeypatch, capsys, install_parameter_client, install_fake_ssh_client):
+    root = tmp_path / "bastion"
+    _set_runtime_env(monkeypatch, root)
+    install_parameter_client('{"password":"secret"}')
+    install_fake_ssh_client({"MainHoldersReport_RFSOLM_Daily_01-Jul-2026.XLSX": b"holder,id\nA,1\n"})
+
+    june_file = root / "data" / "archive" / "Davinci" / "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_30-Jun-2026.XLSX"
+    june_file.parent.mkdir(parents=True, exist_ok=True)
+    june_file.write_bytes(b"bootstrap-window")
+
+    exit_code = run_ingestion.main()
+
+    output = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.strip()]
+    marker = root / "data" / ".registry" / "bootstrap.complete"
+    july_file = root / "data" / "archive" / "GoldenHind" / "MainHoldersReport_RFSOLM_Daily_01-Jul-2026.XLSX"
+
+    assert exit_code == 0
+    assert july_file.read_bytes() == b"holder,id\nA,1\n"
+    assert june_file.exists()
+    assert marker.exists()
+    assert any(event["event"] == "runtime_bootstrap" and event["status"] == "starting" for event in output)
+    assert any(event["event"] == "file_downloaded" and event["localPath"].replace("\\", "/").endswith("GoldenHind/MainHoldersReport_RFSOLM_Daily_01-Jul-2026.XLSX") for event in output)
+    assert any(event["event"] == "retention_complete" and event["deletedCount"] == 0 for event in output)
+    assert any(event["event"] == "ingestion_complete" and event["status"] == "success" for event in output)
+
+
 def test_main_skips_already_archived_files_and_downloads_only_missing(tmp_path, monkeypatch, capsys, install_parameter_client, install_fake_ssh_client):
     root = tmp_path / "bastion"
     _set_runtime_env(monkeypatch, root)
@@ -51,14 +77,17 @@ def test_main_skips_already_archived_files_and_downloads_only_missing(tmp_path, 
     existing = root / "data" / "archive" / "Davinci" / "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_01-Jul-2026.XLSX"
     existing.parent.mkdir(parents=True, exist_ok=True)
     existing.write_bytes(b"old-bytes")
+    legacy_existing = root / "data" / "archive" / "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_02-Jul-2026.XLSX"
+    legacy_existing.write_bytes(b"legacy-bytes")
 
     exit_code = run_ingestion.main()
 
     output = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.strip()]
     assert exit_code == 0
     assert existing.read_bytes() == b"old-bytes"
-    assert (root / "data" / "archive" / "Davinci" / "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_02-Jul-2026.XLSX").read_bytes() == b"missing-bytes"
-    assert any(event["event"] == "ingestion_complete" and event["downloadedCount"] == 1 for event in output)
+    assert legacy_existing.read_bytes() == b"legacy-bytes"
+    assert (root / "data" / "archive" / "Davinci" / "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_02-Jul-2026.XLSX").exists() is False
+    assert any(event["event"] == "ingestion_complete" and event["downloadedCount"] == 0 for event in output)
 
 
 def test_main_direct_manual_operator_path_runs_without_scheduler(tmp_path, monkeypatch, capsys, install_parameter_client, install_fake_ssh_client):
@@ -126,10 +155,37 @@ def test_main_auth_failure_returns_nonzero(tmp_path, monkeypatch, capsys, instal
     _set_runtime_env(monkeypatch, root)
     install_parameter_client('{"password":"secret"}')
     install_fake_ssh_client(auth_error=True)
+    marker = root / "data" / ".registry" / "bootstrap.complete"
 
     exit_code = run_ingestion.main()
 
     output = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.strip()]
     assert exit_code == 1
+    assert not marker.exists()
+    assert any(event["event"] == "ingestion_failed" and event["status"] == "failure" for event in output)
+    assert any(event["event"] == "ingestion_complete" and event["status"] == "failure" for event in output)
+
+
+def test_main_client_error_does_not_create_bootstrap_marker(tmp_path, monkeypatch, capsys, install_parameter_client, install_fake_ssh_client):
+    root = tmp_path / "bastion"
+    _set_runtime_env(monkeypatch, root)
+    install_parameter_client('{"password":"secret"}')
+    ssh_client = install_fake_ssh_client({})
+
+    class BrokenSftpSession:
+        def listdir_attr(self, remote_dir):
+            raise RuntimeError("list failed")
+
+        def close(self):
+            return None
+
+    ssh_client.open_sftp = lambda: BrokenSftpSession()
+    marker = root / "data" / ".registry" / "bootstrap.complete"
+
+    exit_code = run_ingestion.main()
+
+    output = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert exit_code == 1
+    assert not marker.exists()
     assert any(event["event"] == "ingestion_failed" and event["status"] == "failure" for event in output)
     assert any(event["event"] == "ingestion_complete" and event["status"] == "failure" for event in output)

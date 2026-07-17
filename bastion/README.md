@@ -4,7 +4,7 @@
 This service runs on the bastion EC2 and pulls files from the Aiva SFTP source into the bastion for later processing.
 
 The goal is simple:
-- extract only the `EnhancedTransactionReportInclFX...` files from Aiva
+- route `MainHoldersReport_RFSOLM_Daily_*` to `GoldenHind` and `EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_*` to `Davinci`
 - land them safely on the bastion
 - keep them local only
 - make them available for downstream processing without exposing credentials or changing the manual fallback process
@@ -16,8 +16,8 @@ The goal is simple:
 2. Load runtime config from environment variables.
 3. Read the SFTP credential reference from SSM Parameter Store.
 4. Connect to the remote SFTP source.
-5. List files and download only the ones that are not already present in `data/archive/`.
-6. Stage them under `data/work/` and promote them to `data/archive/`.
+5. List files and download only the ones that are not already present in the archive, checking both the routed family folders and the legacy flat layout.
+6. Stage them under `data/work/` and promote them to `data/archive/GoldenHind/` or `data/archive/Davinci/` based on report family.
 7. Remove files from previous months and keep only the current month.
 8. Emit JSON logs for each run.
 
@@ -26,7 +26,9 @@ The goal is simple:
 - Config: environment variables + SSM parameter name in `BNY_SFTP_SECRET_ID`
 - AWS region: use `AWS_REGION` or `AWS_DEFAULT_REGION` (defaults to `us-east-1`)
 - Host keys: Paramiko reads `~/.ssh/known_hosts` by default; override with `BNY_SSH_KNOWN_HOSTS` if needed
-- Storage: `data/work/` for staging, `data/archive/` for retained files
+- Storage: `data/work/` for staging, `data/archive/GoldenHind/` and `data/archive/Davinci/` for retained files
+- Report families: `MainHoldersReport_RFSOLM_Daily_*` map to `GoldenHind`; `EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_*` map to `Davinci`
+- Legacy compatibility: files already archived in the flat `data/archive/` layout are still recognized for dedupe
 - Retention: only the current month is kept on each run
 
 ## Inputs
@@ -39,13 +41,14 @@ The goal is simple:
 
 ## Behavior
 - No downloadable files or all files already archived: the run exits cleanly.
-- Files outside the `EnhancedTransactionReportInclFX...` prefix are ignored.
+- Files outside the two routed families above are ignored.
 - Auth or connection failure: the run fails closed and logs the error.
 - All operational events are emitted as JSON logs.
 
 ## Output on the bastion
 - `data/work/` for temporary staging
-- `data/archive/` for retained files
+- `data/archive/GoldenHind/` and `data/archive/Davinci/` for retained files
+- `data/archive/<filename>` remains a valid legacy archive location for dedupe only
 - logs for execution status and retention
 
 ## Rollback

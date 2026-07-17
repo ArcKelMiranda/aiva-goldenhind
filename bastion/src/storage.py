@@ -56,6 +56,16 @@ def archive_path_for(local_root: str | Path, remote_path: str) -> Path:
     return destination / remote_file_name(remote_path)
 
 
+def archive_candidate_paths(local_root: str | Path, remote_path: str) -> tuple[Path, ...]:
+    """Return all archive locations that may contain the remote file."""
+
+    routed_path = archive_path_for(local_root, remote_path)
+    legacy_path = resolve_storage_layout(local_root).archive / remote_file_name(remote_path)
+    if legacy_path == routed_path:
+        return (routed_path,)
+    return (routed_path, legacy_path)
+
+
 def staged_download_path(local_root: str | Path, remote_path: str, correlation_id: str | None = None) -> Path:
     """Return a unique work-path for a downloaded file before promotion."""
 

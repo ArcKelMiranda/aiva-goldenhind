@@ -20,7 +20,7 @@ from src.logger import configure_logger, emit_event
 from src.paths import archive_folder_for, file_date_from_name
 from src.retention import purge_previous_month_files
 from src.sftp_client import SftpAuthError, SftpClient, SftpClientError, SftpNoFileError, parse_secret_payload
-from src.storage import archive_path_for, bootstrap_marker_path, ensure_storage_layout, local_only_directories, promote_staged_file, staged_download_path
+from src.storage import archive_candidate_paths, archive_path_for, bootstrap_marker_path, ensure_storage_layout, local_only_directories, promote_staged_file, staged_download_path
 
 BOOTSTRAP_CUTOFF = date(2026, 6, 28)
 
@@ -70,7 +70,7 @@ def _should_download_file(local_root: str | Path, remote_name: str, now: date | 
 
 
 def _is_already_archived(local_root: str | Path, remote_name: str) -> bool:
-    return archive_path_for(local_root, remote_name).exists()
+    return any(candidate.exists() for candidate in archive_candidate_paths(local_root, remote_name))
 
 
 def _emit_summary(logger, correlation_id: str, status: str, downloaded_files: list[str], deleted_files: list[str]) -> None:
