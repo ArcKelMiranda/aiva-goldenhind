@@ -61,7 +61,7 @@ class SftpNoFileError(SftpClientError):
     """Raised when the remote directory has no downloadable files."""
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class SftpSecret:
     """Authentication material resolved from an SSM parameter payload."""
 

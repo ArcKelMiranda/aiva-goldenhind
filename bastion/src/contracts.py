@@ -7,7 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class IngestConfig:
     """Runtime configuration for the bastion ingestion job."""
 
@@ -20,7 +20,7 @@ class IngestConfig:
     retention_days: int = 90
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class IngestionResult:
     """Outcome emitted by the ingestion runtime."""
 

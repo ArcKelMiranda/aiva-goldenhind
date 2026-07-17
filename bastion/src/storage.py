@@ -10,7 +10,7 @@ from uuid import uuid4
 from .paths import archive_dir, bastion_root, logs_dir, registry_dir, remote_file_name, work_dir
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class StorageLayout:
     """Resolved local storage directories for one bastion host."""
 
