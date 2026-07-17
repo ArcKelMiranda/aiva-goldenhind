@@ -51,6 +51,9 @@ class FakeSSHClient:
     def load_system_host_keys(self) -> None:
         return None
 
+    def load_host_keys(self, filename: str) -> None:
+        return None
+
     def set_missing_host_key_policy(self, policy) -> None:  # noqa: ANN001 - paramiko contract
         return None
 

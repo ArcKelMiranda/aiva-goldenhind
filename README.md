@@ -3,7 +3,7 @@
 Servicio de ingesta para el bastion EC2 de Aiva.
 
 ## Qué hace
-- Extrae archivos desde la fuente SFTP de Aiva.
+- Extrae solo los archivos `EnhancedTransactionReportInclFX...` desde la fuente SFTP de Aiva.
 - Los guarda localmente en el bastion.
 - Los deja listos para su procesamiento posterior.
 

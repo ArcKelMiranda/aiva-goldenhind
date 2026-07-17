@@ -4,7 +4,7 @@
 This service runs on the bastion EC2 and pulls files from the Aiva SFTP source into the bastion for later processing.
 
 The goal is simple:
-- extract the files from Aiva
+- extract only the `EnhancedTransactionReportInclFX...` files from Aiva
 - land them safely on the bastion
 - keep them local only
 - make them available for downstream processing without exposing credentials or changing the manual fallback process
@@ -37,6 +37,7 @@ The goal is simple:
 
 ## Behavior
 - No downloadable files: the run exits cleanly.
+- Files outside the `EnhancedTransactionReportInclFX...` prefix are ignored.
 - Auth or connection failure: the run fails closed and logs the error.
 - All operational events are emitted as JSON logs.
 

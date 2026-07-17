@@ -20,6 +20,8 @@ from src.retention import purge_expired_files
 from src.sftp_client import SftpAuthError, SftpClient, SftpClientError, SftpNoFileError, parse_secret_payload
 from src.storage import ensure_storage_layout, local_only_directories, promote_staged_file, staged_download_path
 
+TARGET_REMOTE_PREFIXES = ("EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_",)
+
 
 def _read_parameter_string(parameter_name: str) -> str:
     region_name = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "us-east-1"
@@ -31,6 +33,10 @@ def _read_parameter_string(parameter_name: str) -> str:
         return value
 
     raise ValueError(f"Parameter {parameter_name} did not contain a usable value")
+
+
+def _is_target_file(remote_name: str) -> bool:
+    return remote_name.startswith(TARGET_REMOTE_PREFIXES) and not remote_name.startswith("~$") and not remote_name.startswith(".")
 
 
 def _emit_summary(logger, correlation_id: str, status: str, downloaded_files: list[str], deleted_files: list[str]) -> None:
@@ -70,7 +76,11 @@ def main() -> int:
     try:
         secret = parse_secret_payload(_read_parameter_string(config.secret_id))
         client = SftpClient(config.sftp_host, config.sftp_port, config.username, secret)
-        for remote_name in client.list_files(config.remote_dir):
+        target_files = [remote_name for remote_name in client.list_files(config.remote_dir) if _is_target_file(remote_name)]
+        if not target_files:
+            raise SftpNoFileError(f"No target files found in {config.remote_dir}")
+
+        for remote_name in target_files:
             staged_path = staged_download_path(config.local_root, remote_name, correlation_id)
             bytes_written = client.download_file(config.remote_dir, remote_name, staged_path)
             archived_path = promote_staged_file(config.local_root, staged_path, remote_name)

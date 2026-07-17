@@ -21,14 +21,18 @@ def test_main_success_pulls_and_archives_file(tmp_path, monkeypatch, capsys, ins
     root = tmp_path / "bastion"
     _set_runtime_env(monkeypatch, root)
     install_parameter_client('{"password":"secret"}')
-    install_fake_ssh_client({"report.csv": b"alpha,beta\n1,2\n"})
+    install_fake_ssh_client({
+        "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_01-Jul-2026.XLSX": b"alpha,beta\n1,2\n",
+        "salesrepOLP20260717070010.csv": b"ignore-me",
+    })
 
     exit_code = run_ingestion.main()
 
     output = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.strip()]
     assert exit_code == 0
-    assert (root / "data" / "archive" / "report.csv").read_bytes() == b"alpha,beta\n1,2\n"
-    assert any(event["event"] == "file_downloaded" and event["localPath"].endswith("report.csv") for event in output)
+    assert (root / "data" / "archive" / "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_01-Jul-2026.XLSX").read_bytes() == b"alpha,beta\n1,2\n"
+    assert not (root / "data" / "archive" / "salesrepOLP20260717070010.csv").exists()
+    assert any(event["event"] == "file_downloaded" and event["localPath"].endswith("EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_01-Jul-2026.XLSX") for event in output)
     assert any(event["event"] == "retention_complete" and event["deletedCount"] == 0 for event in output)
     assert any(event["event"] == "ingestion_complete" and event["status"] == "success" for event in output)
 
@@ -39,14 +43,14 @@ def test_main_direct_manual_operator_path_runs_without_scheduler(tmp_path, monke
     monkeypatch.delenv("BNY_SFTP_SCHEDULE", raising=False)
     monkeypatch.delenv("YHAT_BNY_SCHEDULE", raising=False)
     install_parameter_client('{"password":"secret"}')
-    install_fake_ssh_client({"report.csv": b"alpha,beta\n1,2\n"})
+    install_fake_ssh_client({"EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_01-Jul-2026.XLSX": b"alpha,beta\n1,2\n"})
 
     manual_operator_main = run_ingestion.main
     exit_code = manual_operator_main()
 
     output = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.strip()]
     assert exit_code == 0
-    assert (root / "data" / "archive" / "report.csv").read_bytes() == b"alpha,beta\n1,2\n"
+    assert (root / "data" / "archive" / "EnhancedTransactionReportInclFX_RFSOLM_MonthToDate_01-Jul-2026.XLSX").read_bytes() == b"alpha,beta\n1,2\n"
     assert any(event["event"] == "runtime_bootstrap" and event["status"] == "starting" for event in output)
     assert any(event["event"] == "ingestion_complete" and event["status"] == "success" for event in output)
 
@@ -55,7 +59,7 @@ def test_main_no_file_reports_no_file_and_stays_clean(tmp_path, monkeypatch, cap
     root = tmp_path / "bastion"
     _set_runtime_env(monkeypatch, root)
     install_parameter_client('{"password":"secret"}')
-    install_fake_ssh_client({})
+    install_fake_ssh_client({"salesrepOLP20260717070010.csv": b"ignore-me"})
 
     exit_code = run_ingestion.main()
 
